@@ -129,8 +129,11 @@ int32_t xraudio_opus_deframe(xraudio_opus_object_t object, uint8_t *inbuf, uint3
    return(inlen - XRAUDIO_OPUS_HEADER_LENGTH);
 }
 
-int32_t xraudio_opus_decode(xraudio_opus_object_t object, uint8_t *inbuf, uint32_t inlen, pcm_t *outbuf, uint32_t outlen) {
+int32_t xraudio_opus_decode(xraudio_opus_object_t object, uint8_t framed, uint8_t *inbuf, uint32_t inlen, pcm_t *outbuf, uint32_t outlen) {
    xraudio_opus_obj_t *obj = (xraudio_opus_obj_t *)object;
+   uint8_t buf_index = 0;
+   uint8_t buf_len   = inlen;
+
    if(!xraudio_opus_obj_is_valid(obj)) {
       XLOGD_ERROR("invalid object");
       return(-1);
@@ -140,28 +143,36 @@ int32_t xraudio_opus_decode(xraudio_opus_object_t object, uint8_t *inbuf, uint32
       return(-1);
    }
 
-   if(inlen < XRAUDIO_OPUS_HEADER_LENGTH + 1) {
+   if(inlen < (framed ? XRAUDIO_OPUS_HEADER_LENGTH + 1 : 1)) {
       XLOGD_ERROR("invalid inlen <%u>", inlen);
       return(-1);
    }
 
-   // Process the RF4CE framing
-   uint8_t cmd_id = inbuf[0];
-   
-   if(cmd_id < XRAUDIO_OPUS_CMD_ID_BEGIN || cmd_id > XRAUDIO_OPUS_CMD_ID_END) {
-      XLOGD_ERROR("invalid cmd id <0x%02X>", cmd_id);
-      return(-1);
+   if(framed) {
+       // Process the RF4CE framing
+      uint8_t cmd_id = inbuf[0];
+      
+      if(cmd_id < XRAUDIO_OPUS_CMD_ID_BEGIN || cmd_id > XRAUDIO_OPUS_CMD_ID_END) {
+         XLOGD_ERROR("invalid cmd id <0x%02X>", cmd_id);
+         return(-1);
+      }
+      if(cmd_id != obj->cmd_id_next) {
+         XLOGD_ERROR("discontinuity cmd id <0x%02X> expected <0x%02X", cmd_id, obj->cmd_id_next);
+         obj->cmd_id_next = cmd_id;
+      }
+      
+      xraudio_opus_cmd_id_inc(&obj->cmd_id_next);
+      buf_index = XRAUDIO_OPUS_HEADER_LENGTH;
+      buf_len   = inlen - XRAUDIO_OPUS_HEADER_LENGTH;
    }
-   if(cmd_id != obj->cmd_id_next) {
-      XLOGD_ERROR("discontinuity cmd id <0x%02X> expected <0x%02X", cmd_id, obj->cmd_id_next);
-      obj->cmd_id_next = cmd_id;
-   }
    
-   xraudio_opus_cmd_id_inc(&obj->cmd_id_next);
-   
-   int samples = opus_decode(obj->decoder, &inbuf[XRAUDIO_OPUS_HEADER_LENGTH], inlen - XRAUDIO_OPUS_HEADER_LENGTH, outbuf, outlen, 0);
+   int samples = opus_decode(obj->decoder, &inbuf[buf_index], buf_len, outbuf, outlen, 0);
    if(samples < 0) {
-      XLOGD_ERROR("failed to decode opus frame <%d>.  cmd id <0x%02X> len <%u>", samples, cmd_id, inlen);
+      if(framed) {
+         XLOGD_ERROR("failed to decode opus frame <%d>.  cmd id <0x%02X> len <%u>", samples, inbuf[0], inlen);
+      } else {
+         XLOGD_ERROR("failed to decode opus frame <%d>.  len <%u>", samples, inlen);
+      }
       return(samples);
    }
    return(samples * sizeof(pcm_t));

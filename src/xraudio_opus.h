@@ -46,7 +46,7 @@ void xraudio_opus_version(const char **name, const char **version, const char **
 xraudio_opus_object_t xraudio_opus_create(void);
 
 int32_t xraudio_opus_deframe(xraudio_opus_object_t object, uint8_t *inbuf, uint32_t inlen);
-int32_t xraudio_opus_decode(xraudio_opus_object_t object, uint8_t *inbuf, uint32_t inlen, pcm_t *outbuf, uint32_t outlen);
+int32_t xraudio_opus_decode(xraudio_opus_object_t object, uint8_t framed, uint8_t *inbuf, uint32_t inlen, pcm_t *outbuf, uint32_t outlen);
 bool    xraudio_opus_stats(xraudio_opus_object_t object, xraudio_opus_stats_t *stats);
 bool    xraudio_opus_reset(xraudio_opus_object_t object);
 void    xraudio_opus_destroy(xraudio_opus_object_t object);
